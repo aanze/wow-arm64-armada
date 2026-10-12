@@ -1,0 +1,53 @@
+name: build-turnip
+
+# Compile Turnip (pilote Vulkan Mesa pour Adreno) à la demande, sur un runner GitHub arm64,
+# dans le conteneur SDK Steam Runtime 4 de Valve, et publie une pré-release.
+on:
+  workflow_dispatch:
+    inputs:
+      mesa_ref:
+        description: "Commit (SHA complet) ou tag Mesa, ex. mesa-26.3.0"
+        required: true
+        default: "e3a986f0167aa7d1c5cfd62a63362c65f5339373"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Résoudre la référence Mesa en SHA
+        id: ref
+        run: |
+          ref='${{ inputs.mesa_ref }}'
+          if [[ "$ref" =~ ^[0-9a-f]{40}$ ]]; then sha="$ref"; else
+            sha=$(git ls-remote https://gitlab.freedesktop.org/mesa/mesa.git "refs/tags/$ref^{}" "refs/tags/$ref" "refs/heads/$ref" | head -n1 | cut -f1)
+          fi
+          [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || { echo "référence Mesa introuvable: $ref"; exit 1; }
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"; echo "short=${sha:0:10}" >> "$GITHUB_OUTPUT"
+
+      - name: Compiler
+        env:
+          MESA_COMMIT: ${{ steps.ref.outputs.sha }}
+          CONTAINER_ENGINE: docker
+        run: scripts/build-turnip.sh --out-dir out/turnip
+
+      - name: Empaqueter
+        id: pkg
+        run: |
+          name="turnip-${{ steps.ref.outputs.short }}-${{ github.run_number }}"
+          (cd out && tar -cJf "../$name.tar.xz" turnip)
+          sha256sum "$name.tar.xz" > SHA256SUMS
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+
+      - name: Publier une pré-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ steps.pkg.outputs.name }}" "${{ steps.pkg.outputs.name }}.tar.xz" SHA256SUMS \
+            --prerelease --title "Turnip ${{ steps.pkg.outputs.name }}" \
+            --notes "$(cat out/turnip/BUILDINFO)"

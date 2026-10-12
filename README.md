@@ -35,6 +35,32 @@ Redémarrer Steam, puis choisir `proton-11.0-2e-arm64-fix` dans Propriétés > C
 Le `toolmanifest.vdf` ARM64 de Valve requiert l'outil Steam d'appid `4185400`, que Steam
 installe lui-même.
 
+## Étapes complémentaires pour World of Warcraft (client ARM64 natif) sur Armada
+
+Le build Proton seul ne suffit pas pour le client natif `WowB-ARM64.exe`. Deux compléments :
+
+1. **DXVK / vkd3d-proton en ARM64 pur.** Proton 11.0 (ARM64) livre ces DLL en ARM64EC, qu'un
+   processus ARM64 pur ne peut pas charger (`LoadLibrary(dxgi.dll) Failed (HR:0x000000C1)`).
+   Après avoir extrait l'outil, remplacer ces DLL par celles de Proton Experimental (ARM64) :
+
+   ```sh
+   scripts/install-dxvk-arm64.sh ~/.local/share/Steam/compatibilitytools.d/proton-11.0-2e-arm64-fix
+   ```
+
+2. **Pilote Vulkan Turnip plus récent que celui d'Armada.** Mesa 26.2.x plante en compilant deux
+   shaders de l'écran de connexion (`err:vulkan:vkCreateGraphicsPipelines Exception 0xc0000005`).
+   Un Turnip compilé depuis Mesa en amont, avec deux patchs de
+   [jareqpl/steam-frame-fixes](https://github.com/jareqpl/steam-frame-fixes), est utilisé pour le
+   seul raccourci du jeu. Compilation, installation et mises à jour : [`docs/TURNIP-UPDATE.md`](docs/TURNIP-UPDATE.md).
+
+Options de lancement du raccourci (qui lance directement `WowB-ARM64.exe`) :
+
+```
+VK_ICD_FILENAMES=/var/home/armada/.local/share/wow-turnip/current/freedreno_icd.aarch64.json VK_DRIVER_FILES=/var/home/armada/.local/share/wow-turnip/current/freedreno_icd.aarch64.json /usr/libexec/armada/armada-game-launch %command%
+```
+
+Ne pas jouer avec `PROTON_LOG=1` : le log grossit d'environ 100 Mo/s et fait ramer le jeu.
+
 ## Le correctif
 
 Les thunks de syscall aarch64 chargeaient l'adresse de `__wine_syscall_dispatcher` via un
