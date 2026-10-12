@@ -1,29 +1,29 @@
-# Mettre à jour Turnip (Mesa) pour WoW Forever sur Armada
+# Updating Turnip (Mesa) for WoW Forever on Armada
 
-## Pourquoi un Turnip à part
+## Why a separate Turnip
 
-Le pilote Vulkan d'Armada (Mesa 26.2.x) plante en compilant deux shaders de l'écran de connexion de
-WoW (`vkCreateGraphicsPipelines`, exception `0xc0000005` dans l'appel Unix). On utilise donc, **pour le
-seul raccourci WoW Forever**, un Turnip compilé depuis Mesa en amont avec deux patchs de
-[jareqpl/steam-frame-fixes](https://github.com/jareqpl/steam-frame-fixes) :
+Armada's Vulkan driver (Mesa 26.2.x) crashes while compiling two shaders of the WoW login screen
+(`vkCreateGraphicsPipelines`, exception `0xc0000005` in the Unix call). **For the WoW Forever
+shortcut only**, we therefore use a Turnip built from upstream Mesa with two patches from
+[jareqpl/steam-frame-fixes](https://github.com/jareqpl/steam-frame-fixes):
 
-| Patch | Effet |
+| Patch | Effect |
 |---|---|
-| `0001-tu-fail-pipeline-creation-when-ir3-shader-compilatio.patch` | un échec de compilation de shader renvoie une erreur au lieu de planter |
-| `0002-ir3-log-why-shader-compilation-failed.patch` | journalise la cause de l'échec |
+| `0001-tu-fail-pipeline-creation-when-ir3-shader-compilatio.patch` | a shader compilation failure returns an error instead of crashing |
+| `0002-ir3-log-why-shader-compilation-failed.patch` | logs why the compilation failed |
 
-Les autres jeux, Battle.net et le bureau continuent d'utiliser le Mesa d'Armada.
+Other games, Battle.net and the desktop keep using Armada's Mesa.
 
-## Fichiers du dépôt
+## Repository files
 
-| Fichier | Origine |
+| File | Origin |
 |---|---|
-| `scripts/build-turnip.sh` | copié de jareqpl/steam-frame-fixes (licence MIT, voir `LICENSES/steam-frame-fixes-MIT.txt`) |
-| `patches/mesa/0001-*.patch`, `patches/mesa/0002-*.patch` | idem |
-| `scripts/install-turnip.sh` | installation sur l'Odin, versions côte à côte + lien `current` |
-| `.github/workflows/build-turnip.yml` | compilation à la demande sur un runner GitHub arm64 |
+| `scripts/build-turnip.sh` | copied from jareqpl/steam-frame-fixes (MIT license, see `LICENSES/steam-frame-fixes-MIT.txt`) |
+| `patches/mesa/0001-*.patch`, `patches/mesa/0002-*.patch` | same |
+| `scripts/install-turnip.sh` | installs on the device, side-by-side versions + a `current` link |
+| `.github/workflows/build-turnip.yml` | on-demand build on a GitHub arm64 runner |
 
-Pour reprendre une version plus récente des fichiers de jareqpl :
+To pull a newer version of jareqpl's files:
 
 ```bash
 B=https://raw.githubusercontent.com/jareqpl/steam-frame-fixes/HEAD
@@ -32,13 +32,13 @@ curl -fsSL -o patches/mesa/0001-tu-fail-pipeline-creation-when-ir3-shader-compil
 curl -fsSL -o patches/mesa/0002-ir3-log-why-shader-compilation-failed.patch "$B/patches/mesa/0002-ir3-log-why-shader-compilation-failed.patch"
 ```
 
-Les patchs Mesa sont dans `patches/mesa/` : le workflow Proton n'applique que `patches/*.patch`,
-il ne les voit donc pas.
+The Mesa patches live in `patches/mesa/`: the Proton workflow only applies `patches/*.patch`,
+so it does not pick them up.
 
-## Mise en place initiale sur l'Odin (une seule fois)
+## Initial setup on the device (once)
 
-Le Turnip actuel est dans `~/.local/share/wow-turnip/turnip/`. Pour passer à l'organisation par
-versions, réinstalle-le avec le script (il le recopie dans un dossier versionné et crée `current`) :
+Install the current Turnip build with the script (it goes into a versioned folder and `current`
+points to it):
 
 ```bash
 scripts/install-turnip.sh \
@@ -46,100 +46,99 @@ scripts/install-turnip.sh \
   mesa-26.3.0-devel-e3a986f016
 ```
 
-Puis, une seule fois, mets ces options de lancement sur le raccourci **WoW Forever** et redémarre Steam
-(`steam -shutdown`, Armada le relance tout seul) :
+Then, once, set these launch options on the **WoW Forever** shortcut and restart Steam
+(`steam -shutdown`, Armada starts it again by itself):
 
 ```
 VK_ICD_FILENAMES=/var/home/armada/.local/share/wow-turnip/current/freedreno_icd.aarch64.json VK_DRIVER_FILES=/var/home/armada/.local/share/wow-turnip/current/freedreno_icd.aarch64.json /usr/libexec/armada/armada-game-launch %command%
 ```
 
-Ensuite, changer de version ne demande plus de toucher à Steam : le lien `current` suffit.
-L'ancien dossier `~/.local/share/wow-turnip/turnip/` peut alors être supprimé.
+From then on, switching versions does not require touching Steam: the `current` link is enough.
 
-## Mettre à jour
+## Updating
 
-### 1. Choisir la version de Mesa
+### 1. Pick the Mesa version
 
-Dernières versions publiées : <https://gitlab.freedesktop.org/mesa/mesa/-/tags>.
-Pour obtenir le SHA d'un tag ou de la branche principale :
+Released versions: <https://gitlab.freedesktop.org/mesa/mesa/-/tags>.
+To get the SHA of a tag or of the main branch:
 
 ```bash
 git ls-remote https://gitlab.freedesktop.org/mesa/mesa.git "refs/tags/mesa-26.3.0^{}"
 git ls-remote https://gitlab.freedesktop.org/mesa/mesa.git refs/heads/main
 ```
 
-Préférer un tag de version stable (`mesa-26.3.x`) à la branche `main` : moins de surprises.
+Prefer a stable release tag (`mesa-26.3.x`) over the `main` branch: fewer surprises.
 
-### 2. Compiler
+### 2. Build
 
-**Option A, sur GitHub (recommandé)** : *Actions* → **build-turnip** → *Run workflow*, en donnant
-le tag (ex. `mesa-26.3.0`) ou le SHA. Le workflow publie une pré-release
-`turnip-<sha>-<n>` contenant l'archive et `SHA256SUMS`.
+**Option A, on GitHub (recommended):** *Actions* → **build-turnip** → *Run workflow*, with the
+tag (e.g. `mesa-26.3.0`) or the SHA. The workflow publishes a `turnip-<sha>-<n>` pre-release
+containing the archive and `SHA256SUMS`.
 
-**Option B, directement sur l'Odin** (podman est disponible sur Armada, rien n'est installé sur le système) :
+**Option B, directly on the device** (podman is available on Armada, nothing gets installed on the system):
 
 ```bash
-CONTAINER_ENGINE=podman MESA_COMMIT=<sha complet> scripts/build-turnip.sh
-# résultat dans out/turnip/ ; pour l'installer :
+CONTAINER_ENGINE=podman MESA_COMMIT=<full sha> scripts/build-turnip.sh
+# output in out/turnip/; to install it:
 (cd out && tar -cJf ../turnip-local.tar.xz turnip) && scripts/install-turnip.sh turnip-local.tar.xz
 ```
 
-Le premier lancement télécharge l'image SDK de Valve (quelques Go).
+The first run downloads Valve's SDK image (a few GB).
 
-### 3. Si un patch ne s'applique plus
+### 3. If a patch no longer applies
 
-`build-turnip.sh` s'arrête au `git am` si un patch entre en conflit avec la nouvelle version de Mesa.
+`build-turnip.sh` stops at `git am` when a patch conflicts with the new Mesa version.
 
-1. Vérifier si le correctif a été intégré en amont :
+1. Check whether the fix was merged upstream:
    ```bash
    git -C build/turnip/mesa log --oneline -i --grep "fail pipeline creation" --grep "shader compilation failed" -n 5
    ```
-2. **S'il est intégré** : supprimer le patch correspondant de `patches/mesa/`, et retirer de la boucle
-   de vérification à la fin de `build-turnip.sh` la chaîne qu'il apportait
-   (`failed to compile %s shader` pour le patch 0002).
-3. **Sinon** : adapter le patch à la nouvelle version (ou garder l'ancienne version de Mesa).
+2. **If it was merged:** delete the corresponding patch from `patches/mesa/`, and remove the string
+   it introduced from the verification loop at the end of `build-turnip.sh`
+   (`failed to compile %s shader` for patch 0002).
+3. **Otherwise:** rebase the patch onto the new version (or stay on the previous Mesa version).
 
-### 4. Installer sur l'Odin
+### 4. Install on the device
 
 ```bash
 scripts/install-turnip.sh https://github.com/aanze/wow-arm64-armada/releases/download/<tag>/<archive>.tar.xz
 ```
 
-Vérifie la somme avant si tu télécharges à la main : `sha256sum -c SHA256SUMS`.
-Le script refuse d'écraser une version existante et bascule `current` sur la nouvelle.
+Check the checksum first if you download by hand: `sha256sum -c SHA256SUMS`.
+The script refuses to overwrite an existing version and switches `current` to the new one.
 
-### 5. Tester
+### 5. Test
 
-1. Lancer **WoW Forever**, laisser la vidéo d'intro (elle mène à l'écran de connexion, qui contient
-   les shaders problématiques), se connecter, entrer en jeu.
-2. Vérifier quel pilote le jeu a chargé, pendant qu'il tourne :
+1. Start **WoW Forever**, let the intro video play (it leads to the login screen, which contains
+   the problematic shaders), log in, enter the world.
+2. Check which driver the game loaded, while it runs:
    ```bash
    for p in $(pgrep -f WowB-ARM64.exe); do grep -h libvulkan_freedreno /proc/$p/maps; done | awk '{print $6}' | sort -u
    ```
-   Le chemin doit être dans `~/.local/share/wow-turnip/<version>/`.
+   The path must be under `~/.local/share/wow-turnip/<version>/`.
 
-Pour un diagnostic, ajouter **temporairement** `PROTON_LOG=1` en tête des options de lancement.
-Ne jamais jouer avec : le log grossit d'environ 100 Mo par seconde et fait ramer le jeu.
+For diagnostics, add `PROTON_LOG=1` **temporarily** at the start of the launch options.
+Never play with it: the log grows by about 100 MB/s and makes the game lag.
 
-### 6. Revenir en arrière
+### 6. Roll back
 
 ```bash
-scripts/install-turnip.sh --list              # la version active est marquée d'une *
-scripts/install-turnip.sh --use <version>     # puis relancer le jeu
+scripts/install-turnip.sh --list              # the active version is marked with *
+scripts/install-turnip.sh --use <version>     # then restart the game
 ```
 
-## Se passer du Turnip à part
+## Dropping the separate Turnip
 
-Quand Armada livrera un Mesa ≥ 26.3, tester avec son pilote : retirer `VK_ICD_FILENAMES=…` et
-`VK_DRIVER_FILES=…` des options de lancement, redémarrer Steam, lancer le jeu. Si l'écran de connexion
-passe, supprimer `~/.local/share/wow-turnip`.
+Once Armada ships Mesa ≥ 26.3, test with its driver: remove `VK_ICD_FILENAMES=…` and
+`VK_DRIVER_FILES=…` from the launch options, restart Steam, start the game. If the login screen
+loads, delete `~/.local/share/wow-turnip`.
 
-## Après une mise à jour d'Armada ou de Steam
+## After an Armada or Steam update
 
-Tout ce qui précède est dans `/var/home` et survit aux mises à jour d'Armada (bootc ne remplace que
-`/usr`). En cas de problème après une mise à jour :
+Everything above lives in `/var/home` and survives Armada updates (bootc only replaces `/usr`).
+If something breaks after an update:
 
-1. vérifier que le jeu charge toujours le bon pilote (commande du §5) ;
-2. relancer une fois avec `PROTON_LOG=1` et chercher `err:vulkan` dans `~/steam-*.log` ;
-3. si un changement du Steam Linux Runtime ARM64 casse le pilote, recompiler avec une image SDK plus
-   récente : `SDK_IMAGE=registry.gitlab.steamos.cloud/proton/steamrt4/sdk/arm64-llvm:<tag> scripts/build-turnip.sh`.
+1. check that the game still loads the right driver (command from §5);
+2. run once with `PROTON_LOG=1` and look for `err:vulkan` in `~/steam-*.log`;
+3. if a Steam Linux Runtime ARM64 change breaks the driver, rebuild with a newer SDK image:
+   `SDK_IMAGE=registry.gitlab.steamos.cloud/proton/steamrt4/sdk/arm64-llvm:<tag> scripts/build-turnip.sh`.
