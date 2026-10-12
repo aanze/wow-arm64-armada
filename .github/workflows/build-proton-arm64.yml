@@ -1,0 +1,134 @@
+# Build Valve's Proton 11.0-2e for ARM64 Linux (glibc, Steam compatibility tool)
+# with the patches from patches/ applied to its wine submodule.
+#
+# Follows "ARM64 Builds" in Proton's README: an ARM64 build machine and
+# configure.sh --target-arch=arm64; everything else builds inside Valve's
+# steamrt4 arm64 SDK container.
+name: Build Proton 11.0-2e ARM64 (Steam, patched)
+
+on:
+  push:
+    branches: [ 'claude/**', main, master ]
+  workflow_dispatch:
+
+env:
+  PROTON_REF: proton-11.0-2e
+  BUILD_NAME: proton-11.0-2e-arm64-fix
+  CCACHE_MAXSIZE: 6G
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 360
+    permissions:
+      contents: write
+
+    steps:
+      - name: Free up disk space
+        run: |
+          df -h /
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost /usr/local/lib/android \
+                      /usr/share/swift /opt/hostedtoolcache "$AGENT_TOOLSDIRECTORY" || true
+          sudo docker image prune --all --force || true
+          df -h /
+
+      - name: Check out Proton ${{ env.PROTON_REF }}
+        uses: actions/checkout@v4
+        with:
+          repository: ValveSoftware/Proton
+          ref: ${{ env.PROTON_REF }}
+          path: proton
+          fetch-depth: 0   # the build runs git describe --tags
+
+      - name: Check out submodules
+        working-directory: proton
+        run: |
+          git submodule update --init --recursive --depth 1 --jobs 8 \
+            || git submodule update --init --recursive --jobs 8
+          # The build runs "git -C FEX describe" without --always: needs FEX's tags.
+          git -C FEX fetch --unshallow --tags origin || git -C FEX fetch --tags origin
+          git -C FEX describe --abbrev=7
+          git describe --tags
+          git submodule status | grep -E ' wine( |$)'
+
+      - name: Check out patches
+        uses: actions/checkout@v4
+        with:
+          path: fix
+
+      - name: Apply patches to wine
+        run: |
+          for p in fix/patches/*.patch; do
+            echo "== $p"
+            git -C proton/wine apply -v "$GITHUB_WORKSPACE/$p"
+          done
+          grep -n '0x7ffe1000' proton/wine/include/wine/asm.h proton/wine/dlls/ntdll/unix/signal_arm64.c
+
+      - name: Restore ccache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.ccache
+          key: ccache-valve-arm64-${{ github.sha }}
+          restore-keys: |
+            ccache-valve-arm64-
+
+      - name: Configure
+        run: |
+          mkdir build
+          cd build
+          ../proton/configure.sh --target-arch=arm64 --enable-ccache \
+            --build-name="$BUILD_NAME" --container-engine=docker
+
+      # Stop make before the 6h job limit so that ccache is still saved and a
+      # re-run of the workflow can pick up where this one stopped.
+      - name: Build (make redist)
+        working-directory: build
+        run: |
+          set -o pipefail
+          timeout --signal=INT 320m make -j$(nproc) redist 2>&1 | tee build.log
+          ls redist
+
+      - name: Show build errors
+        if: failure()
+        working-directory: build
+        run: grep -n '] Error [0-9]\|error:' build.log | tail -50 || true
+
+      - name: Save ccache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.ccache
+          key: ccache-valve-arm64-${{ github.sha }}-${{ github.run_attempt }}
+
+      - name: Verify the syscall thunks in the built ntdll
+        run: |
+          find build/redist -name ntdll.dll
+          python3 fix/scripts/check-thunks.py build/redist/files/lib/wine/aarch64-windows/ntdll.dll
+
+      - name: Package
+        run: |
+          mv build/redist "$BUILD_NAME"
+          cat "$BUILD_NAME/compatibilitytool.vdf" "$BUILD_NAME/toolmanifest.vdf"
+          tar -I 'xz -T0 -6' -cf "$BUILD_NAME.tar.xz" "$BUILD_NAME"
+          sha256sum "$BUILD_NAME.tar.xz" | tee SHA256SUMS
+          ls -la "$BUILD_NAME.tar.xz"
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.BUILD_NAME }}-${{ github.run_number }}
+          target_commitish: ${{ github.sha }}
+          name: Proton 11.0-2e ARM64 + syscall dispatcher fix (build ${{ github.run_number }})
+          prerelease: true
+          files: |
+            ${{ env.BUILD_NAME }}.tar.xz
+            SHA256SUMS
+          body: |
+            Test build. Use at your own risk.
+
+            Valve [Proton `${{ env.PROTON_REF }}`](https://github.com/ValveSoftware/Proton/tree/${{ env.PROTON_REF }}) built for ARM64 Linux (`configure.sh --target-arch=arm64`, Valve's steamrt4 arm64 SDK container), with this patch applied to its wine submodule:
+            - `ntdll: Use a fixed address for the syscall dispatcher pointer on aarch64` (patches/0001-ntdll-fixed-address-syscall-dispatcher-aarch64.patch)
+
+            Built from ${{ github.repository }}@${{ github.sha }}.
+
+            Install: extract into `~/.steam/root/compatibilitytools.d/` (gives `${{ env.BUILD_NAME }}/`), restart Steam, then pick `${{ env.BUILD_NAME }}` under Properties > Compatibility.
