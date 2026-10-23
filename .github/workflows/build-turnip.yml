@@ -25,7 +25,10 @@ jobs:
         run: |
           ref='${{ inputs.mesa_ref }}'
           if [[ "$ref" =~ ^[0-9a-f]{40}$ ]]; then sha="$ref"; else
-            sha=$(git ls-remote https://gitlab.freedesktop.org/mesa/mesa.git "refs/tags/$ref^{}" "refs/tags/$ref" "refs/heads/$ref" | head -n1 | cut -f1)
+            url=https://gitlab.freedesktop.org/mesa/mesa.git
+            # An annotated tag lists both the tag object and the commit it points to ("^{}"): use the commit.
+            sha=$(git ls-remote "$url" "refs/tags/$ref^{}" | cut -f1)
+            [[ -n "$sha" ]] || sha=$(git ls-remote "$url" "refs/tags/$ref" "refs/heads/$ref" | head -n1 | cut -f1)
           fi
           [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || { echo "Mesa ref not found: $ref"; exit 1; }
           echo "sha=$sha" >> "$GITHUB_OUTPUT"; echo "short=${sha:0:10}" >> "$GITHUB_OUTPUT"
