@@ -53,11 +53,27 @@ The Proton build alone is not enough for the native `WowB-ARM64.exe` client. Two
    [jareqpl/steam-frame-fixes](https://github.com/jareqpl/steam-frame-fixes), is used for the
    game's shortcut only. Building, installing and updating it: [`docs/TURNIP-UPDATE.md`](docs/TURNIP-UPDATE.md).
 
-Launch options of the shortcut (which starts `WowB-ARM64.exe` directly):
+Launch options of the shortcut that starts the game directly (`_forever_/Wow-ARM64.exe`, or `_classic_beta_/WowB-ARM64.exe` for the beta):
 
 ```
 VK_ICD_FILENAMES=/var/home/armada/.local/share/wow-turnip/current/freedreno_icd.aarch64.json VK_DRIVER_FILES=/var/home/armada/.local/share/wow-turnip/current/freedreno_icd.aarch64.json /usr/libexec/armada/armada-game-launch %command%
 ```
+
+### Launching from Battle.net (no manual login)
+
+Battle.net is installed in the same Wine prefix as the game (its own non-Steam shortcut, pointing at
+`Battle.net Launcher.exe`). To start WoW from Battle.net's **Play** button, so the client receives
+`-launcherlogin` and skips the login screen, the **Battle.net** shortcut needs the same setup as the game shortcut:
+
+- compatibility tool: `proton-11.0-2e-arm64-fix` (with the ARM64 DXVK step above);
+- the same launch options (`VK_ICD_FILENAMES=… VK_DRIVER_FILES=… /usr/libexec/armada/armada-game-launch %command%`).
+
+Battle.net passes its environment to the game it starts, so this is what makes `Wow-ARM64.exe` load the
+patched Turnip. Without these variables, WoW started from Battle.net uses Armada's Mesa 26.2.x and never
+shows up. Battle.net itself runs fine with the newer Turnip.
+
+In the gamescope session, the WoW window can stay behind Battle.net's: wait for the game to load, or pick
+the WoW window from the Steam button menu.
 
 Do not play with `PROTON_LOG=1`: the log grows by about 100 MB/s and makes the game lag.
 

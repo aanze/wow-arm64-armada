@@ -53,6 +53,8 @@ Then, once, set these launch options on the **WoW Forever** shortcut and restart
 VK_ICD_FILENAMES=/var/home/armada/.local/share/wow-turnip/current/freedreno_icd.aarch64.json VK_DRIVER_FILES=/var/home/armada/.local/share/wow-turnip/current/freedreno_icd.aarch64.json /usr/libexec/armada/armada-game-launch %command%
 ```
 
+If you launch the game from Battle.net (auto-login), put the same launch options on the **Battle.net** shortcut too: the game inherits them from Battle.net (see the README).
+
 From then on, switching versions does not require touching Steam: the `current` link is enough.
 
 ## Updating
